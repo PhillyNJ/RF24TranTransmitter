@@ -1,14 +1,26 @@
 /**
  *  RF Radio Train Transmitter
- *
+ * bcm2835 Library required to run
+ * # http://www.airspayce.com/mikem/bcm2835/index.html
+ * 
+ * sudo wget http://www.airspayce.com/mikem/bcm2835/bcm2835-1.36.tar.gz
+ * #download the latest version of the library, say bcm2835-1.xx.tar.gz, then:
+ * tar zxvf bcm2835-1.xx.tar.gz
+ * cd bcm2835-1.xx
+ * ./configure
+ * make
+ * sudo make check
+ * sudo make install
  */
 
 #include <cstdlib>
 #include <iostream>
 #include <bcm2835.h>
 #include "../RF24.h"
-
+#include <stdlib.h>  
 #define PIN RPI_GPIO_P1_11 // pin 17
+
+void SyncRadios();
 
 RF24 radio("/dev/spidev0.0",8000000 , 25);  //spi device, speed and CSN,only CSN is NEEDED in RPI
 
@@ -59,6 +71,9 @@ void setup(void)
   radio.startListening();
   // Dump the configuration of the rf unit for debugging
   radio.printDetails();
+    
+  SyncRadios();
+
 }
 
 void loop(void)
@@ -71,8 +86,8 @@ void loop(void)
     unsigned int  mess = 41;
 
     // Take the time, and send it.  This will block until complete
-    unsigned long time = __millis();
-    printf("Now sending: %lu ---  ...",mess);
+
+    printf("Now sending: %u ...",mess);
     bool ok = radio.write( &mess, sizeof(unsigned int));
     
     if (ok)
@@ -104,10 +119,59 @@ void loop(void)
       unsigned long got_time;
       radio.read( &got_time, sizeof(unsigned long) );
        // got a reposne - turn on led
-      bcm2835_gpio_write(PIN, HIGH);
+      //bcm2835_gpio_write(PIN, HIGH);
       // Spew it
       printf("Got response %lu, round-trip delay: %lu\n\r",got_time,__millis()-got_time);
     }
+
+}
+
+void SyncRadios(){ 
+    
+    radio.stopListening();
+
+    unsigned int  mess = 41;
+
+    // Take the time, and send it.  This will block until complete
+
+    printf("Now sending: %u ...",mess);
+    bool ok = radio.write( &mess, sizeof(unsigned int));
+    
+    if (ok)
+      printf(" ok...");
+    else
+      printf("failed.\n\r");
+
+    // Now, continue listening
+    radio.startListening();
+
+    // Wait here until we get a response, or timeout (250ms)
+    unsigned long started_waiting_at = __millis();
+    bool timeout = false;
+    while ( ! radio.available() && ! timeout ) {
+        __msleep(30); //add a small delay to let radio.available to check payload
+      if (__millis() - started_waiting_at > 200 )
+        timeout = true;
+    }
+    // Describe the results
+    if ( timeout )
+    {
+      printf("Failed, response timed out.\n\r");
+      bcm2835_gpio_write(PIN, LOW);
+    }
+    else
+    {
+      // Grab the response, compare, and send to debugging spew
+      unsigned long got_time;
+      radio.read( &got_time, sizeof(unsigned long) );
+       // got a reposne - turn on led
+      bcm2835_gpio_write(PIN, LOW); // set pin low just in case and wait 3 seconds
+      sleep(3); //just sleep for debugging     
+      // Spew it
+      printf("Established Initial Radio COntact with RF1 with response %lu, round-trip delay: %lu\n\r",got_time,__millis()-got_time);
+      bcm2835_gpio_write(PIN, HIGH);
+   }
+    
 
 }
 
