@@ -18,7 +18,8 @@
 #include <bcm2835.h>
 #include "../RF24.h"
 #include <stdlib.h>  
-#define PIN RPI_GPIO_P1_11 // pin 17
+#define RADIO_1_LED RPI_GPIO_P1_11 // pin 17
+#define RADIO_1_COMMAND RPI_V2_GPIO_P1_26 // pin 8
 
 void SyncRadios();
 
@@ -47,9 +48,12 @@ void setup(void)
    if (!bcm2835_init())
 	printf("Warning Cannot access GPIO!!!!!!!");
 
-   // Set the pin to be an output
-   bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_OUTP);
-
+   // Set the radio 1 led  pin to be an output
+   bcm2835_gpio_fsel(RADIO_1_LED, BCM2835_GPIO_FSEL_OUTP);
+   // Set RPI pin 3 to be an input
+   bcm2835_gpio_fsel(RADIO_1_COMMAND, BCM2835_GPIO_FSEL_INPT);
+   //  with a pullup
+   bcm2835_gpio_set_pud(RADIO_1_COMMAND, BCM2835_GPIO_PUD_DOWN);
    // Setup and configure rf radio
    radio.begin();
 
@@ -83,6 +87,14 @@ void loop(void)
     // First, stop listening so we can talk.
     radio.stopListening();
    
+   // Read some data
+    uint8_t value = bcm2835_gpio_lev(RADIO_1_COMMAND);
+    printf("read from pin 8: %d\n", value);
+	
+	// wait a bit
+    delay(500);
+    
+
     unsigned int  mess = 41;
 
     // Take the time, and send it.  This will block until complete
@@ -111,7 +123,7 @@ void loop(void)
     if ( timeout )
     {
       printf("Failed, response timed out.\n\r");
-      bcm2835_gpio_write(PIN, LOW);
+      bcm2835_gpio_write(RADIO_1_LED, LOW);
     }
     else
     {
@@ -157,7 +169,7 @@ void SyncRadios(){
     if ( timeout )
     {
       printf("Failed, response timed out.\n\r");
-      bcm2835_gpio_write(PIN, LOW);
+      bcm2835_gpio_write(RADIO_1_LED, LOW);
     }
     else
     {
@@ -165,11 +177,11 @@ void SyncRadios(){
       unsigned long got_time;
       radio.read( &got_time, sizeof(unsigned long) );
        // got a reposne - turn on led
-      bcm2835_gpio_write(PIN, LOW); // set pin low just in case and wait 3 seconds
+      bcm2835_gpio_write(RADIO_1_LED, LOW); // set pin low just in case and wait 3 seconds
       sleep(3); //just sleep for debugging     
       // Spew it
       printf("Established Initial Radio COntact with RF1 with response %lu, round-trip delay: %lu\n\r",got_time,__millis()-got_time);
-      bcm2835_gpio_write(PIN, HIGH);
+      bcm2835_gpio_write(RADIO_1_LED, HIGH);
    }
     
 
