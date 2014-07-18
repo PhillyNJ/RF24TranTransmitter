@@ -94,46 +94,44 @@ void loop(void)
 	// wait a bit
     delay(500);
     
+    if(value ==  1){
+	unsigned int  mess = 41;
 
-    unsigned int  mess = 41;
+    	// Take the time, and send it.  This will block until complete
 
-    // Take the time, and send it.  This will block until complete
-
-    printf("Now sending: %u ...",mess);
-    bool ok = radio.write( &mess, sizeof(unsigned int));
+    	printf("Now sending: %u ...",mess);
+    	bool ok = radio.write( &mess, sizeof(unsigned int));
     
-    if (ok)
-      printf(" ok...");
-    else
-      printf("failed.\n\r");
+    	if (ok)
+      		printf(" ok...");
+    	else
+      		printf("failed.\n\r");
 
-    // Now, continue listening
-    radio.startListening();
+    	// Now, continue listening
+    	radio.startListening();
 
-    // Wait here until we get a response, or timeout (250ms)
-    unsigned long started_waiting_at = __millis();
-    bool timeout = false;
-    while ( ! radio.available() && ! timeout ) {
-	__msleep(30); //add a small delay to let radio.available to check payload
-      if (__millis() - started_waiting_at > 200 )
-        timeout = true;
-    }
+    	// Wait here until we get a response, or timeout (250ms)
+    	unsigned long started_waiting_at = __millis();
+    	bool timeout = false;
+    	while ( ! radio.available() && ! timeout ) {
+        	__msleep(30); //add a small delay to let radio.available to check payload
+      		if (__millis() - started_waiting_at > 200 )
+        		timeout = true;
+    	}
 
-    // Describe the results
-    if ( timeout )
-    {
-      printf("Failed, response timed out.\n\r");
-      bcm2835_gpio_write(RADIO_1_LED, LOW);
-    }
-    else
-    {
-      // Grab the response, compare, and send to debugging spew
-      unsigned long got_time;
-      radio.read( &got_time, sizeof(unsigned long) );
-       // got a reposne - turn on led
-      //bcm2835_gpio_write(PIN, HIGH);
-      // Spew it
-      printf("Got response %lu, round-trip delay: %lu\n\r",got_time,__millis()-got_time);
+    	// Describe the results
+    	if ( timeout )
+    	{
+      		printf("Failed, response timed out.\n\r");
+      		bcm2835_gpio_write(RADIO_1_LED, LOW);
+    	}
+    	else
+    	{
+      		// Grab the response, compare, and send to debugging spew
+      		unsigned long got_time;
+      		radio.read( &got_time, sizeof(unsigned long) );
+      		printf("Got response %lu, round-trip delay: %lu\n\r",got_time,__millis()-got_time);
+    	}
     }
 
 }
