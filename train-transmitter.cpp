@@ -19,7 +19,7 @@
 #include "../RF24.h"
 #include <stdlib.h>  
 #define RADIO_1_LED RPI_GPIO_P1_11 // pin 17
-#define RADIO_1_COMMAND RPI_V2_GPIO_P1_26 // pin 8
+#define RADIO_1_COMMAND RPI_V2_GPIO_P1_07 // pin 4
 
 void SyncRadios();
 
@@ -89,18 +89,15 @@ void loop(void)
    
    // Read some data
     uint8_t value = bcm2835_gpio_lev(RADIO_1_COMMAND);
-    printf("read from pin 8: %d\n", value);
+    printf("Read from pin 4 %d\n", value);
 	
 	// wait a bit
     delay(500);
-    
-    if(value ==  1){
-	unsigned int  mess = 41;
 
     	// Take the time, and send it.  This will block until complete
 
-    	printf("Now sending: %u ...",mess);
-    	bool ok = radio.write( &mess, sizeof(unsigned int));
+    	printf("Now sending: %u ...",value);
+    	bool ok = radio.write( &value, sizeof(unsigned int));
     
     	if (ok)
       		printf(" ok...");
@@ -131,8 +128,8 @@ void loop(void)
       		unsigned long got_time;
       		radio.read( &got_time, sizeof(unsigned long) );
       		printf("Got response %lu, round-trip delay: %lu\n\r",got_time,__millis()-got_time);
-    	}
-    }
+    		bcm2835_gpio_write(RADIO_1_LED, HIGH);
+	}
 
 }
 
@@ -176,7 +173,7 @@ void SyncRadios(){
       radio.read( &got_time, sizeof(unsigned long) );
        // got a reposne - turn on led
       bcm2835_gpio_write(RADIO_1_LED, LOW); // set pin low just in case and wait 3 seconds
-      sleep(3); //just sleep for debugging     
+      sleep(1); //just sleep for debugging     
       // Spew it
       printf("Established Initial Radio COntact with RF1 with response %lu, round-trip delay: %lu\n\r",got_time,__millis()-got_time);
       bcm2835_gpio_write(RADIO_1_LED, HIGH);
