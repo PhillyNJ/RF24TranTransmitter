@@ -1,10 +1,11 @@
 /**
  *  RF Radio Train Transmitter
+ * Requires RF24 Library http://maniacbug.github.io/RF24/index.html
  * bcm2835 Library required to run
- * # http://www.airspayce.com/mikem/bcm2835/index.html
+ * http://www.airspayce.com/mikem/bcm2835/index.html
  * 
  * sudo wget http://www.airspayce.com/mikem/bcm2835/bcm2835-1.36.tar.gz
- * #download the latest version of the library, say bcm2835-1.xx.tar.gz, then:
+ * download the latest version of the library, say bcm2835-1.xx.tar.gz, then:
  * tar zxvf bcm2835-1.xx.tar.gz
  * cd bcm2835-1.xx
  * ./configure
@@ -20,6 +21,7 @@
 #include <stdlib.h>  
 #define RADIO_1_LED RPI_GPIO_P1_11 // pin 17
 #define RADIO_1_COMMAND RPI_V2_GPIO_P1_07 // pin 4
+#define RADIO_2_COMMAND RPI_V2_GPIO_P1_15 // pin 22
 
 void SyncRadios();
 
@@ -28,8 +30,7 @@ RF24 radio("/dev/spidev0.0",8000000 , 25);  //spi device, speed and CSN,only CSN
 const int role_pin = 7;
 
 // Radio pipe addresses for the 2 nodes to communicate.
-//const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL };
-const uint64_t pipes[2] = { 0xF0F0F0F0E9LL, 0xF0F0F0F0D2LL };
+const uint64_t pipes[3] = { 0xF0F0F0F0E9LL, 0xF0F0F0F0D2LL, 0xF0F0F0F0AALL };
 
 typedef enum { role_ping_out = 1, role_pong_back } role_e;
 
@@ -52,9 +53,11 @@ void setup(void)
    bcm2835_gpio_fsel(RADIO_1_LED, BCM2835_GPIO_FSEL_OUTP);
    // Set RPI pin 3 to be an input
    bcm2835_gpio_fsel(RADIO_1_COMMAND, BCM2835_GPIO_FSEL_INPT);
-   //  with a pullup
+  bcm2835_gpio_fsel(RADIO_2_COMMAND, BCM2835_GPIO_FSEL_INPT);  
+ //  with a pullup
    bcm2835_gpio_set_pud(RADIO_1_COMMAND, BCM2835_GPIO_PUD_DOWN);
-   // Setup and configure rf radio
+   bcm2835_gpio_set_pud(RADIO_2_COMMAND, BCM2835_GPIO_PUD_DOWN); 
+  // Setup and configure rf radio
    radio.begin();
 
   // optionally, increase the delay between retries & # of retries
@@ -65,11 +68,10 @@ void setup(void)
 
   // Open pipes to other nodes for communication
   // pipe for reading in position #1 (we can have up to 5 pipes open for reading)
-  // Role is alway [ping out as we are transmitting
   
   radio.openWritingPipe(pipes[0]);
-  radio.openReadingPipe(1,pipes[1]);
-  
+  radio.openReadingPipe(1,pipes[1]); // radio 1
+  radio.openReadingPipe(2,pipes[2]); // radio 2
   // Start listening
  
   radio.startListening();
@@ -90,46 +92,60 @@ void loop(void)
    // Read some data
     uint8_t value = bcm2835_gpio_lev(RADIO_1_COMMAND);
     printf("Read from pin 4 %d\n", value);
-	
+   
+   uint8_t radio_2_button = bcm2835_gpio_lev(RADIO_2_COMMAND);
+   printf("Read from pin 22 %d\n", radio_2_button);  	
 	// wait a bit
     delay(500);
+    uint8_t command;
+    if(value == 1){
+	 printf("Now sending: %u ...", 1);
+         command = 1;
+    }else if (radio_2_button == 1) {
 
-    	// Take the time, and send it.  This will block until complete
-
-    	printf("Now sending: %u ...",value);
-    	bool ok = radio.write( &value, sizeof(unsigned int));
+         printf("Now sending: %u ...", 2);
+	 command = 2;
     
-    	if (ok)
-      		printf(" ok...");
-    	else
-      		printf("failed.\n\r");
+    }else{
+         command = 0;
+    }
+    bool ok = radio.write( &command, sizeof(unsigned int));
+    
+    if (ok)
+    	printf(" ok...");
+    else
+    	printf("failed.\n\r");
 
-    	// Now, continue listening
-    	radio.startListening();
+    // Now, continue listening
+    radio.startListening();
 
-    	// Wait here until we get a response, or timeout (250ms)
-    	unsigned long started_waiting_at = __millis();
-    	bool timeout = false;
-    	while ( ! radio.available() && ! timeout ) {
-        	__msleep(30); //add a small delay to let radio.available to check payload
-      		if (__millis() - started_waiting_at > 200 )
-        		timeout = true;
-    	}
+    // Wait here until we get a response, or timeout (250ms)
+    unsigned long started_waiting_at = __millis();
+    bool timeout = false;
+    while ( ! radio.available() && ! timeout ) {
+       	__msleep(30); //add a small delay to let radio.available to check payload
+    	if (__millis() - started_waiting_at > 200 )
+       		timeout = true;
+    }
 
-    	// Describe the results
-    	if ( timeout )
-    	{
-      		printf("Failed, response timed out.\n\r");
-      		bcm2835_gpio_write(RADIO_1_LED, LOW);
-    	}
-    	else
-    	{
-      		// Grab the response, compare, and send to debugging spew
-      		unsigned long got_time;
-      		radio.read( &got_time, sizeof(unsigned long) );
-      		printf("Got response %lu, round-trip delay: %lu\n\r",got_time,__millis()-got_time);
-    		bcm2835_gpio_write(RADIO_1_LED, HIGH);
+    // Describe the results
+    if ( timeout )
+    {
+    	printf("Failed, response timed out.\n\r");
+    	bcm2835_gpio_write(RADIO_1_LED, LOW);
+    }
+    else
+    {
+    	// Grab the response, compare, and send to debugging spew
+    	unsigned long response;
+    	radio.read( &response, sizeof(unsigned long) );
+    	if(response == 99){
+		printf("Got response from Radio 1 -  %lu, round-trip delay: %lu\n\r",response,__millis());
+	}else if(response == 101){
+		printf("Got response From Radio 2 -   %lu, round-trip delay: %lu\n\r",response,__millis());
 	}
+    	bcm2835_gpio_write(RADIO_1_LED, HIGH);
+    }
 
 }
 
