@@ -19,9 +19,11 @@
 #include <bcm2835.h>
 #include "../RF24.h"
 #include <stdlib.h>  
+
 #define RADIO_1_LED RPI_GPIO_P1_11 // pin 17
 #define RADIO_1_COMMAND RPI_V2_GPIO_P1_07 // pin 4
 #define RADIO_2_COMMAND RPI_V2_GPIO_P1_15 // pin 22
+#define KILL RPI_V2_GPIO_P1_10 // gpio 15
 
 void SyncRadios();
 
@@ -30,7 +32,7 @@ RF24 radio("/dev/spidev0.0",8000000 , 25);  //spi device, speed and CSN,only CSN
 const int role_pin = 7;
 
 // Radio pipe addresses for the 2 nodes to communicate.
-const uint64_t pipes[3] = { 0xF0F0F0F0E9LL, 0xF0F0F0F0D2LL, 0xF0F0F0F0AALL };
+const uint64_t pipes[2] = { 0xF0F0F0F0E9LL, 0xF0F0F0F0D2LL };
 
 typedef enum { role_ping_out = 1, role_pong_back } role_e;
 
@@ -53,11 +55,13 @@ void setup(void)
    bcm2835_gpio_fsel(RADIO_1_LED, BCM2835_GPIO_FSEL_OUTP);
    // Set RPI pin 3 to be an input
    bcm2835_gpio_fsel(RADIO_1_COMMAND, BCM2835_GPIO_FSEL_INPT);
-  bcm2835_gpio_fsel(RADIO_2_COMMAND, BCM2835_GPIO_FSEL_INPT);  
- //  with a pullup
+   bcm2835_gpio_fsel(RADIO_2_COMMAND, BCM2835_GPIO_FSEL_INPT);  
+   bcm2835_gpio_fsel(KILL, BCM2835_GPIO_FSEL_INPT);
+   //  with a pullDOWN
    bcm2835_gpio_set_pud(RADIO_1_COMMAND, BCM2835_GPIO_PUD_DOWN);
    bcm2835_gpio_set_pud(RADIO_2_COMMAND, BCM2835_GPIO_PUD_DOWN); 
-  // Setup and configure rf radio
+   bcm2835_gpio_set_pud(KILL, BCM2835_GPIO_PUD_DOWN);
+   // Setup and configure rf radio
    radio.begin();
 
   // optionally, increase the delay between retries & # of retries
@@ -71,7 +75,7 @@ void setup(void)
   
   radio.openWritingPipe(pipes[0]);
   radio.openReadingPipe(1,pipes[1]); // radio 1
-  radio.openReadingPipe(2,pipes[2]); // radio 2
+ // radio.openReadingPipe(2,pipes[2]); // radio 2
   // Start listening
  
   radio.startListening();
@@ -97,7 +101,7 @@ void loop(void)
    printf("Read from pin 22 %d\n", radio_2_button);  	
 	// wait a bit
     delay(500);
-    uint8_t command;
+    int command;
     if(value == 1){
 	 printf("Now sending: %u ...", 1);
          command = 1;
@@ -146,7 +150,13 @@ void loop(void)
 	}
     	bcm2835_gpio_write(RADIO_1_LED, HIGH);
     }
-
+    // check is user kills program
+    uint8_t kill_program = bcm2835_gpio_lev(KILL);
+    if(kill_program==1)	{
+	printf("Program Terminated by User. Good Bye\n");
+	bcm2835_gpio_write(RADIO_1_LED, LOW);
+        exit(0);
+    }
 }
 
 void SyncRadios(){ 
